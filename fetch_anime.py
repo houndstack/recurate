@@ -13,20 +13,40 @@ query ($page: Int, $perPage: Int) {
       currentPage
     }
     media(type: ANIME, sort: POPULARITY_DESC) {
-      id
-      title {
+        id
+        idMal
+        format
+        title {
         romaji
         english
-      }
-      genres
-      tags {
+        }
+        format
+        description
+        episodes
+        coverImage{
+        large
+        medium
+        color
+        }
+        bannerImage
+        genres
+        tags {
         name
         rank
-      }
-      averageScore
-      popularity
-      episodes
-      format
+        }
+        siteUrl
+        relations{
+        edges{
+            relationType
+            node{
+            id
+            }
+        }
+        }
+        averageScore
+        popularity
+        episodes
+        format
     }
   }
 }

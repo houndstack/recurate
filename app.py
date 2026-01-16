@@ -2,12 +2,33 @@ import json
 import numpy as np
 from typing import List
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.neighbors import NearestNeighbors
 from sklearn.preprocessing import MultiLabelBinarizer
 from scipy.sparse import hstack, vstack
+
+
+
+# =============================
+# FastAPI App
+# =============================
+app = FastAPI(
+    title="Anime Recommendation API",
+    description="Cosine similarity + kNN anime recommender using AniList data",
+)
+
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],  # Vite dev server
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 
 # =============================
@@ -24,6 +45,9 @@ class Recommendation(BaseModel):
     similarity: float
     shared_genres: List[str]
     shared_tags: List[str]
+    score: int
+    cover_image: str
+    anilist_url: str
 
 
 # =============================
@@ -36,6 +60,9 @@ class AnimeRecommender:
         self.titles = []
         self.genres = []
         self.tags = []
+        self.images = []
+        self.scores = []
+        self.links = []
 
         self.X = None
         self.knn = None
@@ -62,6 +89,18 @@ class AnimeRecommender:
         self.genres = [a["genres"] for a in self.anime]
         self.tags = [
             [t["name"] for t in a["tags"]]
+            for a in self.anime
+        ]
+        self.images = [
+            a["coverImage"]["large"]
+            for a in self.anime
+        ]
+        self.scores = [
+            a["averageScore"]
+            for a in self.anime
+        ]
+        self.links = [
+            a["siteUrl"]
             for a in self.anime
         ]
 
@@ -140,16 +179,12 @@ class AnimeRecommender:
             "similarity": round(1 - dist, 3),
             "shared_genres": sorted(shared_genres),
             "shared_tags": sorted(list(shared_tags))[:5],
+            "score": self.scores[idx],
+            "cover_image": self.images[idx],
+            "anilist_url": self.links[idx]
         }
 
 
-# =============================
-# FastAPI App
-# =============================
-app = FastAPI(
-    title="Anime Recommendation API",
-    description="Cosine similarity + kNN anime recommender using AniList data",
-)
 
 recommender = AnimeRecommender("anime_data.json")
 

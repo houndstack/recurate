@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Anime Recommender</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #0f172a;
+      color: #e5e7eb;
+      padding: 40px;
+    }
+    h1 {
+      color: #38bdf8;
+    }
+    input, button {
+      padding: 10px;
+      font-size: 16px;
+      margin-top: 10px;
+      width: 100%;
+    }
+    button {
+      background: #38bdf8;
+      border: none;
+      cursor: pointer;
+      margin-top: 15px;
+    }
+    button:hover {
+      background: #0ea5e9;
+    }
+    .card {
+      background: #1e293b;
+      padding: 15px;
+      margin-top: 15px;
+      border-radius: 8px;
+    }
+    .similarity {
+      color: #22c55e;
+      font-weight: bold;
+    }
+    .tag {
+      display: inline-block;
+      background: #334155;
+      padding: 4px 8px;
+      margin: 3px;
+      border-radius: 6px;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Anime Recommendation Engine</h1>
+
+  <p>Enter AniList anime IDs (comma-separated):</p>
+  <input id="animeIds" placeholder="e.g. 16498, 5114" />
+
+  <button onclick="getRecommendations()">Recommend</button>
+
+  <div id="results"></div>
+
+  <script>
+    async function getRecommendations() {
+      const input = document.getElementById("animeIds").value;
+      const ids = input.split(",").map(x => parseInt(x.trim())).filter(Boolean);
+
+      if (ids.length === 0) {
+        alert("Please enter at least one anime ID.");
+        return;
+      }
+
+      const response = await fetch("http://localhost:8000/recommend", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          anime_ids: ids,
+          k: 10
+        })
+      });
+
+      const data = await response.json();
+      const container = document.getElementById("results");
+      container.innerHTML = "";
+
+      data.forEach(anime => {
+        const div = document.createElement("div");
+        div.className = "card";
+
+        div.innerHTML = `
+          <h3>${anime.title}</h3>
+          <p class="similarity">Similarity: ${anime.similarity}</p>
+
+          <strong>Shared Genres:</strong><br/>
+          ${anime.shared_genres.map(g => `<span class="tag">${g}</span>`).join("")}
+          <br/><br/>
+
+          <strong>Shared Tags:</strong><br/>
+          ${anime.shared_tags.map(t => `<span class="tag">${t}</span>`).join("")}
+        `;
+
+        container.appendChild(div);
+      });
+    }
+  </script>
+
+</body>
+</html>
