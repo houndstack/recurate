@@ -7,3 +7,4 @@ export interface Recommendation {
   cover_image: string;
   anilist_url: string;
 }
+

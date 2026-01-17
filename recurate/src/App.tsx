@@ -3,7 +3,6 @@ import React from "react"
 //import AnimeInput from "./components/AnimeInput";
 import AnimeCard from "./components/AnimeCard";
 import { fetchRecommendations } from "./api";
-//import { type Recommendation } from "./types";
 
 import { useDarkMode } from "./hooks/useDarkMode";
 import AnimeSearchInput from "./components/AnimeSearchInput";
@@ -26,6 +25,11 @@ export default function App() {
     setResults(recs);
     setLoading(false);
   };
+
+  function removeAnime(id: number) {
+    setSelected(prev => prev.filter(a => a.id !== id))
+  }
+
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors">
@@ -67,19 +71,47 @@ export default function App() {
             Recommend
           </button>
         </div>
+
+        
         {/* Selected anime */}
-        {selected.length > 0 && (
-          <div className="mt-6 flex gap-3 flex-wrap">
-            {selected.map((a) => (
-              <span
-                key={a.id}
-                className="rounded-full bg-gray-200 dark:bg-gray-800 px-3 py-1 text-sm"
-              >
-                {a.title}
+        <div className="flex flex-wrap gap-3 mt-4">
+          {selected.map(anime => (
+            <div
+              key={anime.id}
+              className="
+                flex items-center gap-3
+                bg-gray-100 dark:bg-gray-800
+                border border-gray-300 dark:border-gray-700
+                rounded-xl px-3 py-2
+                shadow-sm
+              "
+            >
+              <img
+                src={anime.coverImage}
+                alt={anime.title}
+                className="w-10 h-14 rounded object-cover"
+              />
+
+              <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                {anime.title}
               </span>
-            ))}
-          </div>
-        )}
+
+              <button
+                onClick={() => removeAnime(anime.id)}
+                className="
+                  ml-2 text-gray-500 hover:text-red-500
+                  dark:text-gray-400 dark:hover:text-red-400
+                  transition-colors
+                "
+                aria-label="Remove anime"
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+
+        
 
         {/* Results */}
         <section className="mt-12 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-6">

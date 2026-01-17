@@ -149,7 +149,8 @@ class AnimeRecommender:
                 print(f"Anime ID {aid} not found")
                 continue
             indices.append(self.ids.index(aid))
-
+        if len(indices) == 0:
+            return []
         # ---- Multi-anime user vector ----
         user_vector = np.asarray(self.X.todok()[indices].mean(axis=0))
 
