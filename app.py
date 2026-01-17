@@ -97,7 +97,7 @@ class AnimeRecommender:
             for a in self.anime
         ]
         self.scores = [
-            a["averageScore"]
+            int(a["averageScore"] or 0)
             for a in self.anime
         ]
         self.links = [
@@ -141,10 +141,13 @@ class AnimeRecommender:
     # Recommendation Logic
     # -------------------------
     def recommend(self, anime_ids: List[int], k: int):
+        print(anime_ids, k)
         indices = []
         for aid in anime_ids:
             if aid not in self.ids:
-                raise ValueError(f"Anime ID {aid} not found")
+                #raise ValueError(f"Anime ID {aid} not found")
+                print(f"Anime ID {aid} not found")
+                continue
             indices.append(self.ids.index(aid))
 
         # ---- Multi-anime user vector ----
@@ -164,7 +167,7 @@ class AnimeRecommender:
 
             if len(results) >= k:
                 break
-
+        #print(results)
         return results
 
     # -------------------------

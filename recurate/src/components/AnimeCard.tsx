@@ -19,7 +19,10 @@ export default function AnimeCard({ anime }: { anime: any }) {
           {anime.title}
         </h3>
         <p className="text-xs text-gray-500 dark:text-gray-400">
-          Similarity: {anime.score.toFixed(2)}
+          <strong>Similarity:</strong> {anime.similarity.toFixed(2)}
+        </p>
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          <strong>Average Score:</strong> {anime.score.toFixed(2)}
         </p>
       </div>
 
