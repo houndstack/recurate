@@ -1,9 +1,10 @@
 import { type Recommendation } from "./types";
 
 export async function fetchRecommendations(
-  animeTitles: string[],
+  animeTitles: number[],
   k: number
 ): Promise<Recommendation[]> {
+  console.log(animeTitles, k)
   const res = await fetch("http://localhost:8000/recommend", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -12,7 +13,7 @@ export async function fetchRecommendations(
       k: k,
     }),
   });
-
+  console.log(animeTitles, k)
   if (!res.ok) {
     throw new Error("Failed to fetch recommendations");
   }

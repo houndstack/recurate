@@ -48,6 +48,7 @@ class Recommendation(BaseModel):
     score: int
     cover_image: str
     anilist_url: str
+    explanation: str
 
 
 # =============================
@@ -181,9 +182,30 @@ class AnimeRecommender:
             "shared_tags": sorted(list(shared_tags))[:5],
             "score": self.scores[idx],
             "cover_image": self.images[idx],
-            "anilist_url": self.links[idx]
+            "anilist_url": self.links[idx],
+            "explanation": generate_explanation(
+                sorted(shared_genres), sorted(list(shared_tags))[:5]
+            )
         }
 
+def generate_explanation(shared_genres, shared_tags):
+
+    parts = []
+
+    if shared_genres:
+        parts.append(
+            "Shared genres: " + ", ".join(list(shared_genres)[:3])
+        )
+
+    if shared_tags:
+        parts.append(
+            "Common themes: " + ", ".join(list(shared_tags)[:3])
+        )
+
+    if not parts:
+        return "Recommended based on overall similarity in style and structure."
+
+    return " · ".join(parts)
 
 
 recommender = AnimeRecommender("anime_data.json")
