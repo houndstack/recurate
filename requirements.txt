@@ -60,3 +60,4 @@ typst==0.12.2
 urllib3==2.6.3
 uvicorn==0.40.0
 watchdog==6.0.0
+wxPython==4.2.2
