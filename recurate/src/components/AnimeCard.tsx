@@ -1,4 +1,4 @@
-import { type Recommendation } from "../types";
+
 import React from "react"
 
 export default function AnimeCard({ anime }: { anime: any }) {
