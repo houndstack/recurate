@@ -1,4 +1,5 @@
 export interface Recommendation {
+  id: number;
   title: string;
   score: number;
   similarity: number;
@@ -6,5 +7,6 @@ export interface Recommendation {
   shared_tags: string[];
   cover_image: string;
   anilist_url: string;
+  explanation: string;
 }
 
