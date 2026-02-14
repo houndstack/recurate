@@ -163,7 +163,8 @@ class AnimeRecommender:
         )
         X_tags = self.tfidf.fit_transform(tag_strings)
 
-        self.X = hstack([X_genres, X_tags]).astype(np.float32)
+        # CSR is required for fast row slicing (used by recommend/map endpoints).
+        self.X = hstack([X_genres, X_tags], format="csr").astype(np.float32)
 
     def _fit_knn(self):
         self.knn = NearestNeighbors(
@@ -187,7 +188,7 @@ class AnimeRecommender:
         if len(indices) == 0:
             return []
         # ---- Multi-anime user vector ----
-        user_vector = np.asarray(self.X.todok()[indices].mean(axis=0))
+        user_vector = np.asarray(self.X[indices].mean(axis=0))
 
         distances, neighbors = self.knn.kneighbors(
             user_vector,
