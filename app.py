@@ -3,12 +3,13 @@ import numpy as np
 from typing import List
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi import Query
 from pydantic import BaseModel
 
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.neighbors import NearestNeighbors
 from sklearn.preprocessing import MultiLabelBinarizer
-from scipy.sparse import hstack, vstack
+from scipy.sparse import hstack
 
 
 
@@ -51,6 +52,35 @@ class Recommendation(BaseModel):
     explanation: str
 
 
+class SimilarAnime(BaseModel):
+    id: int
+    title: str
+    similarity: float
+
+
+class MapNode(BaseModel):
+    id: int
+    title: str
+    score: int
+    popularity: int
+    cover_image: str
+    anilist_url: str
+    genres: List[str]
+    radius: float
+    similar: List[SimilarAnime]
+
+
+class MapEdge(BaseModel):
+    source: int
+    target: int
+    weight: float
+
+
+class MapResponse(BaseModel):
+    nodes: List[MapNode]
+    edges: List[MapEdge]
+
+
 # =============================
 # Recommender Core
 # =============================
@@ -63,6 +93,7 @@ class AnimeRecommender:
         self.tags = []
         self.images = []
         self.scores = []
+        self.popularity = []
         self.links = []
 
         self.X = None
@@ -102,6 +133,10 @@ class AnimeRecommender:
         ]
         self.links = [
             a["siteUrl"]
+            for a in self.anime
+        ]
+        self.popularity = [
+            int(a.get("popularity") or 0)
             for a in self.anime
         ]
 
@@ -171,6 +206,86 @@ class AnimeRecommender:
         #print(results)
         return results
 
+    def build_similarity_map(self, limit: int = 180, neighbors: int = 5):
+        if limit < 20:
+            limit = 20
+        if limit > 350:
+            limit = 350
+        if neighbors < 2:
+            neighbors = 2
+        if neighbors > 10:
+            neighbors = 10
+
+        ranked = sorted(
+            range(len(self.anime)),
+            key=lambda i: (self.popularity[i], self.scores[i]),
+            reverse=True
+        )[:limit]
+
+        sub_X = self.X[ranked]
+        sub_knn = NearestNeighbors(metric="cosine", algorithm="brute")
+        sub_knn.fit(sub_X)
+
+        distances, neighbor_ix = sub_knn.kneighbors(
+            sub_X,
+            n_neighbors=neighbors + 1
+        )
+
+        max_pop = max(self.popularity[i] for i in ranked) or 1
+        min_pop = min(self.popularity[i] for i in ranked)
+        pop_span = max(max_pop - min_pop, 1)
+
+        edges = {}
+        nodes = []
+
+        for local_i, global_i in enumerate(ranked):
+            local_neighbors = []
+            for local_j, dist in zip(
+                neighbor_ix[local_i][1:],
+                distances[local_i][1:]
+            ):
+                global_j = ranked[int(local_j)]
+                sim = float(round(max(0.0, 1 - float(dist)), 4))
+                local_neighbors.append({
+                    "id": self.ids[global_j],
+                    "title": self.titles[global_j],
+                    "similarity": sim,
+                })
+
+                a = self.ids[global_i]
+                b = self.ids[global_j]
+                edge_key = (a, b) if a < b else (b, a)
+                if edge_key not in edges or sim > edges[edge_key]["weight"]:
+                    edges[edge_key] = {
+                        "source": edge_key[0],
+                        "target": edge_key[1],
+                        "weight": sim,
+                    }
+
+            pop_norm = (self.popularity[global_i] - min_pop) / pop_span
+            radius = round(8.0 + pop_norm * 18.0, 2)
+
+            nodes.append({
+                "id": self.ids[global_i],
+                "title": self.titles[global_i],
+                "score": self.scores[global_i],
+                "popularity": self.popularity[global_i],
+                "cover_image": self.images[global_i],
+                "anilist_url": self.links[global_i],
+                "genres": self.genres[global_i][:4],
+                "radius": radius,
+                "similar": local_neighbors,
+            })
+
+        return {
+            "nodes": nodes,
+            "edges": sorted(
+                edges.values(),
+                key=lambda e: e["weight"],
+                reverse=True
+            ),
+        }
+
     # -------------------------
     # Explanations
     # -------------------------
@@ -221,6 +336,14 @@ def recommend(req: RecommendRequest):
         return recommender.recommend(req.anime_ids, req.k)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/map", response_model=MapResponse)
+def map_data(
+    limit: int = Query(180, ge=20, le=350),
+    neighbors: int = Query(5, ge=2, le=10),
+):
+    return recommender.build_similarity_map(limit=limit, neighbors=neighbors)
 
 
 @app.get("/")

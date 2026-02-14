@@ -6,8 +6,10 @@ import { useDarkMode } from "./hooks/useDarkMode";
 import AnimeSearchInput from "./components/AnimeSearchInput";
 import type { Recommendation } from "./types";
 import type { AniListResult } from "./api/anilist";
+import AnimeMapTab from "./components/AnimeMapTab";
 
 type SortMode = "match" | "score";
+type ViewTab = "discover" | "map";
 
 export default function App() {
   const { dark, toggle } = useDarkMode();
@@ -19,6 +21,7 @@ export default function App() {
   const [k, setK] = useState(8);
   const [minScore, setMinScore] = useState(65);
   const [sortMode, setSortMode] = useState<SortMode>("match");
+  const [tab, setTab] = useState<ViewTab>("discover");
 
   const recommend = async () => {
     setLoading(true);
@@ -66,8 +69,8 @@ export default function App() {
                 Recurate
               </h1>
               <p className="mt-2 max-w-2xl text-sm text-slate-600 dark:text-slate-300">
-                Pick a few favorites, then tune recommendations with filters for
-                match strength and score quality.
+                Discover recommendations or explore the interactive similarity
+                map where connected clusters reveal related anime.
               </p>
             </div>
 
@@ -79,6 +82,31 @@ export default function App() {
             </button>
           </div>
 
+          <div className="mb-4 inline-flex rounded-xl border border-slate-300/80 bg-white/80 p-1 dark:border-slate-700 dark:bg-slate-900/70">
+            <button
+              onClick={() => setTab("discover")}
+              className={`rounded-lg px-4 py-2 text-xs font-semibold transition ${
+                tab === "discover"
+                  ? "bg-cyan-500 text-white shadow-lg shadow-cyan-500/20"
+                  : "text-slate-700 hover:text-cyan-700 dark:text-slate-300 dark:hover:text-cyan-300"
+              }`}
+            >
+              Discover
+            </button>
+            <button
+              onClick={() => setTab("map")}
+              className={`rounded-lg px-4 py-2 text-xs font-semibold transition ${
+                tab === "map"
+                  ? "bg-cyan-500 text-white shadow-lg shadow-cyan-500/20"
+                  : "text-slate-700 hover:text-cyan-700 dark:text-slate-300 dark:hover:text-cyan-300"
+              }`}
+            >
+              Similarity Map
+            </button>
+          </div>
+
+          {tab === "discover" && (
+            <>
           <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
             <AnimeSearchInput
               onAdd={(anime) =>
@@ -162,15 +190,17 @@ export default function App() {
               </button>
             ))}
           </div>
+            </>
+          )}
         </header>
 
-        {error && (
+        {tab === "discover" && error && (
           <p className="mb-4 rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-800 dark:bg-rose-900/30 dark:text-rose-300">
             {error}
           </p>
         )}
 
-        {loading ? (
+        {tab === "discover" && loading ? (
           <section className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
             {Array.from({ length: k }).map((_, i) => (
               <div
@@ -179,13 +209,17 @@ export default function App() {
               />
             ))}
           </section>
-        ) : (
+        ) : null}
+
+        {tab === "discover" && !loading ? (
           <section className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
             {filteredResults.map((anime, index) => (
               <AnimeCard key={anime.id} anime={anime} index={index} />
             ))}
           </section>
-        )}
+        ) : null}
+
+        {tab === "map" && <AnimeMapTab />}
       </div>
     </div>
   );
