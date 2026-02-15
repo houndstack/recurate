@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { fetchAnimeMap } from "../api";
 import type { MapEdge, MapNode } from "../types";
 
@@ -33,13 +33,9 @@ function shouldShowLabel(node: MapNode, zoom: number, selected: boolean): boolea
   return node.radius >= 11;
 }
 
-export default function AnimeMapTab({
-  dark,
-  onToggleTheme,
-}: {
-  dark: boolean;
-  onToggleTheme: () => void;
-}) {
+export default function AnimeMapTab() {
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  const movedRef = useRef(false);
   const [nodes, setNodes] = useState<MapNode[]>([]);
   const [edges, setEdges] = useState<MapEdge[]>([]);
   const [loading, setLoading] = useState(true);
@@ -104,11 +100,25 @@ export default function AnimeMapTab({
       .slice(0, 45);
   }, [positionedNodes, query]);
 
+  const toSvgPoint = (clientX: number, clientY: number) => {
+    const svg = svgRef.current;
+    if (!svg) return { x: 0, y: 0, sx: 1, sy: 1 };
+    const rect = svg.getBoundingClientRect();
+    const sx = VIEW_W / rect.width;
+    const sy = VIEW_H / rect.height;
+    return {
+      x: (clientX - rect.left) * sx,
+      y: (clientY - rect.top) * sy,
+      sx,
+      sy,
+    };
+  };
+
   const centerOnNode = (id: number) => {
     const node = nodeById.get(id);
     if (!node) return;
     setSelectedId(id);
-    const nextZoom = Math.max(zoom, 0.85);
+    const nextZoom = Math.max(zoom, 1.25);
     setZoom(nextZoom);
     setOffset({
       x: VIEW_W / 2 - node.px * nextZoom,
@@ -118,13 +128,29 @@ export default function AnimeMapTab({
 
   const onWheel: React.WheelEventHandler<SVGSVGElement> = (e) => {
     e.preventDefault();
-    const delta = e.deltaY > 0 ? -0.05 : 0.05;
-    setZoom((z) => Math.max(0.22, Math.min(3.2, z + delta)));
+    const pointer = toSvgPoint(e.clientX, e.clientY);
+
+    setZoom((prevZoom) => {
+      const step = e.deltaY > 0 ? 0.88 : 1.14;
+      const nextZoom = Math.max(0.18, Math.min(18, prevZoom * step));
+
+      setOffset((prevOffset) => {
+        const worldX = (pointer.x - prevOffset.x) / prevZoom;
+        const worldY = (pointer.y - prevOffset.y) / prevZoom;
+        return {
+          x: pointer.x - worldX * nextZoom,
+          y: pointer.y - worldY * nextZoom,
+        };
+      });
+
+      return nextZoom;
+    });
   };
 
   const onPointerDown: React.PointerEventHandler<SVGSVGElement> = (e) => {
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
+    movedRef.current = false;
     setDragging(true);
     setDragStart({ x: e.clientX, y: e.clientY });
   };
@@ -133,26 +159,31 @@ export default function AnimeMapTab({
     if (!dragging) return;
     const dx = e.clientX - dragStart.x;
     const dy = e.clientY - dragStart.y;
-    const sensitivity = 1.7 / Math.max(zoom, 0.28);
+    if (Math.abs(dx) + Math.abs(dy) > 2) movedRef.current = true;
+
+    const pointer = toSvgPoint(e.clientX, e.clientY);
     setOffset((prev) => ({
-      x: prev.x + dx * sensitivity,
-      y: prev.y + dy * sensitivity,
+      x: prev.x + dx * pointer.sx,
+      y: prev.y + dy * pointer.sy,
     }));
     setDragStart({ x: e.clientX, y: e.clientY });
   };
 
   const onPointerUp: React.PointerEventHandler<SVGSVGElement> = (e) => {
-    e.currentTarget.releasePointerCapture(e.pointerId);
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
     setDragging(false);
   };
 
   return (
     <div className="relative h-full w-full select-none overflow-hidden">
       <svg
+        ref={svgRef}
         width="100%"
         height="100%"
         viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
-        className={`h-full w-full ${dragging ? "cursor-grabbing" : "cursor-grab"} bg-slate-50 dark:bg-slate-950/85`}
+        className={`h-full w-full touch-none ${dragging ? "cursor-grabbing" : "cursor-grab"} bg-slate-50 dark:bg-slate-950/85`}
         onWheel={onWheel}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
@@ -165,7 +196,7 @@ export default function AnimeMapTab({
             y={VIEW_H / 2}
             textAnchor="middle"
             fontSize="42"
-            fill={dark ? "#94a3b8" : "#475569"}
+            fill="#64748b"
           >
             Building map...
           </text>
@@ -208,7 +239,10 @@ export default function AnimeMapTab({
               return (
                 <g
                   key={node.id}
-                  onClick={() => centerOnNode(node.id)}
+                  onClick={() => {
+                    if (movedRef.current) return;
+                    centerOnNode(node.id);
+                  }}
                   className="cursor-pointer"
                 >
                   <circle
@@ -217,7 +251,7 @@ export default function AnimeMapTab({
                     r={node.radius + (isActive ? 3 : 0)}
                     fill={isActive ? "#f8fafc" : baseColor}
                     fillOpacity={isActive ? 0.96 : 0.82}
-                    stroke={isActive ? "#22d3ee" : dark ? "#0f172a" : "#e2e8f0"}
+                    stroke={isActive ? "#22d3ee" : "#e2e8f0"}
                     strokeWidth={isActive ? 3 : 1.1}
                   />
                   {shouldShowLabel(node, zoom, isActive) && (
@@ -242,28 +276,16 @@ export default function AnimeMapTab({
 
       <button
         onClick={() => setSidebarOpen((v) => !v)}
-        className="absolute left-4 top-4 z-20 rounded-xl border border-slate-300 bg-white/85 px-3 py-2 text-xs font-semibold text-slate-700 shadow dark:border-slate-700 dark:bg-slate-900/85 dark:text-slate-200"
+        className="absolute right-4 top-4 z-20 rounded-xl border border-slate-300 bg-white/85 px-3 py-2 text-xs font-semibold text-slate-700 shadow dark:border-slate-700 dark:bg-slate-900/85 dark:text-slate-200"
       >
-        {sidebarOpen ? "Hide Panel" : "Show Panel"}
+        {sidebarOpen ? "Hide Info" : "Show Info"}
       </button>
 
       <aside
-        className={`absolute right-4 top-4 z-20 h-[calc(100%-2rem)] overflow-y-auto rounded-2xl border border-slate-200/80 bg-white/85 p-4 shadow-2xl shadow-slate-900/15 backdrop-blur transition-all dark:border-slate-700 dark:bg-slate-900/85 ${
+        className={`absolute right-4 top-16 z-20 h-[calc(100%-5rem)] overflow-y-auto rounded-2xl border border-slate-200/80 bg-white/85 p-4 shadow-2xl shadow-slate-900/15 backdrop-blur transition-all dark:border-slate-700 dark:bg-slate-900/85 ${
           sidebarOpen ? "w-[360px] opacity-100" : "w-0 overflow-hidden border-0 p-0 opacity-0"
         }`}
       >
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-bold tracking-wide text-slate-900 dark:text-slate-100">
-            MAP PANEL
-          </h2>
-          <button
-            onClick={onToggleTheme}
-            className="rounded-lg border border-slate-300 px-2 py-1 text-xs font-semibold dark:border-slate-700"
-          >
-            {dark ? "Light" : "Dark"}
-          </button>
-        </div>
-
         <p className="mb-3 text-xs text-slate-600 dark:text-slate-300">
           {nodes.length.toLocaleString()} nodes | {Math.round(zoom * 100)}% zoom
         </p>
