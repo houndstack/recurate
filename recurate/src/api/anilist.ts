@@ -10,7 +10,7 @@ const ANILIST_ENDPOINT = "https://graphql.anilist.co";
 export async function searchAnime(query: string): Promise<AniListResult[]> {
   const gql = `
     query ($search: String) {
-      Page(perPage: 5) {
+      Page(perPage: 12) {
         media(search: $search, type: ANIME) {
           id
           title {

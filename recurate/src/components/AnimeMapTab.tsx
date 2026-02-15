@@ -28,11 +28,13 @@ function shortTitle(title: string, max = 18): string {
 export default function AnimeMapTab() {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const movedRef = useRef(false);
+  const directClickRef = useRef<number | null>(null);
   const zoomRef = useRef(0.45);
   const offsetRef = useRef({ x: 380, y: 260 });
   const [nodes, setNodes] = useState<MapNode[]>([]);
   const [edges, setEdges] = useState<MapEdge[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showWakeMessage, setShowWakeMessage] = useState(false);
   const [error, setError] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -58,6 +60,19 @@ export default function AnimeMapTab() {
     };
     load();
   }, []);
+
+  React.useEffect(() => {
+    if (!loading) {
+      setShowWakeMessage(false);
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setShowWakeMessage(true);
+    }, 5000);
+
+    return () => window.clearTimeout(timer);
+  }, [loading]);
 
   const positionedNodes = useMemo(
     () =>
@@ -148,7 +163,9 @@ export default function AnimeMapTab() {
   };
 
   const onWheel: React.WheelEventHandler<SVGSVGElement> = (e) => {
-    e.preventDefault();
+    if (e.cancelable) {
+      e.preventDefault();
+    }
     const pointer = toSvgPoint(e.clientX, e.clientY);
 
     setZoom((prevZoom) => {
@@ -175,6 +192,7 @@ export default function AnimeMapTab() {
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
     movedRef.current = false;
+    directClickRef.current = null;
     setDragging(true);
     setDragStart({ x: e.clientX, y: e.clientY });
   };
@@ -226,7 +244,10 @@ export default function AnimeMapTab() {
     if (e.currentTarget.hasPointerCapture(e.pointerId)) {
       e.currentTarget.releasePointerCapture(e.pointerId);
     }
-    if (!movedRef.current) {
+    if (directClickRef.current !== null) {
+      focusNode(directClickRef.current, false);
+      directClickRef.current = null;
+    } else if (!movedRef.current) {
       const hitId = pickNodeAtClientPoint(e.clientX, e.clientY);
       if (hitId !== null) {
         focusNode(hitId, false);
@@ -296,7 +317,16 @@ export default function AnimeMapTab() {
               const isActive = node.id === selectedId;
               const baseColor = CLUSTER_COLORS[node.cluster % CLUSTER_COLORS.length];
               return (
-                <g key={node.id} className="cursor-pointer">
+                <g
+                  key={node.id}
+                  className="cursor-pointer"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (movedRef.current) return;
+                    directClickRef.current = node.id;
+                    focusNode(node.id, false);
+                  }}
+                >
                   <circle
                     cx={node.px}
                     cy={node.py}
@@ -338,6 +368,11 @@ export default function AnimeMapTab() {
           sidebarOpen ? "w-[360px] opacity-100" : "w-0 overflow-hidden border-0 p-0 opacity-0"
         }`}
       >
+        {loading && showWakeMessage && (
+          <p className="mb-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+            Backend may be waking up on Render free tier. Initial map load can take ~30-60 seconds.
+          </p>
+        )}
         <p className="mb-3 text-xs text-slate-600 dark:text-slate-300">
           {nodes.length.toLocaleString()} nodes | {Math.round(zoom * 100)}% zoom
         </p>

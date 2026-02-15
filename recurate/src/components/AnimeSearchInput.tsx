@@ -30,14 +30,14 @@ export default function AnimeSearchInput({ onAdd }: Props) {
   return (
     <div className="relative w-full">
       <input
-        className="w-full rounded-xl border border-slate-300/70 bg-white/80 px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition placeholder:text-slate-500 focus:border-cyan-400 focus:bg-white dark:border-slate-700 dark:bg-slate-900/80 dark:text-slate-100 dark:placeholder:text-slate-400"
+        className="w-full rounded-xl border border-slate-300/70 bg-white/80 px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition placeholder:text-slate-500 focus:border-cyan-400 dark:border-slate-700 dark:bg-slate-900/80 dark:text-slate-100 dark:placeholder:text-slate-400 dark:focus:bg-slate-900"
         placeholder="Search anime title..."
         value={query}
         onChange={(e) => setQuery(e.target.value)}
       />
 
       {results.length > 0 && (
-        <div className="absolute z-10 mt-2 w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900">
+        <div className="absolute z-10 mt-2 max-h-96 w-full overflow-y-auto overflow-x-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900">
           {results.map((anime) => (
             <button
               key={anime.id}

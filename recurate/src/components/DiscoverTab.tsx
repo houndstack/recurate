@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import React from "react";
 import AnimeCard from "./AnimeCard";
 import { fetchRecommendations } from "../api";
@@ -12,6 +12,7 @@ export default function DiscoverTab() {
   const [selected, setSelected] = useState<AniListResult[]>([]);
   const [results, setResults] = useState<Recommendation[]>([]);
   const [loading, setLoading] = useState(false);
+  const [showWakeMessage, setShowWakeMessage] = useState(false);
   const [error, setError] = useState("");
 
   const [k, setK] = useState(8);
@@ -38,6 +39,19 @@ export default function DiscoverTab() {
   function removeAnime(id: number) {
     setSelected((prev) => prev.filter((a) => a.id !== id));
   }
+
+  useEffect(() => {
+    if (!loading) {
+      setShowWakeMessage(false);
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setShowWakeMessage(true);
+    }, 5000);
+
+    return () => window.clearTimeout(timer);
+  }, [loading]);
 
   const filteredResults = useMemo(() => {
     const next = results.filter((anime) => anime.score >= minScore);
@@ -151,6 +165,11 @@ export default function DiscoverTab() {
         {error && (
           <p className="mb-4 rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-800 dark:bg-rose-900/30 dark:text-rose-300">
             {error}
+          </p>
+        )}
+        {loading && showWakeMessage && (
+          <p className="mb-4 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+            Backend may be waking up on Render free tier. This can take ~30-60 seconds.
           </p>
         )}
 
