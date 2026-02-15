@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.neighbors import NearestNeighbors
 from sklearn.preprocessing import MultiLabelBinarizer
+from sklearn.decomposition import TruncatedSVD
 from scipy.sparse import hstack
 
 
@@ -67,6 +68,8 @@ class MapNode(BaseModel):
     anilist_url: str
     genres: List[str]
     radius: float
+    x: float
+    y: float
     similar: List[SimilarAnime]
 
 
@@ -210,8 +213,8 @@ class AnimeRecommender:
     def build_similarity_map(self, limit: int = 180, neighbors: int = 5):
         if limit < 20:
             limit = 20
-        if limit > 350:
-            limit = 350
+        if limit > 1200:
+            limit = 1200
         if neighbors < 2:
             neighbors = 2
         if neighbors > 10:
@@ -224,6 +227,15 @@ class AnimeRecommender:
         )[:limit]
 
         sub_X = self.X[ranked]
+        svd = TruncatedSVD(n_components=2, random_state=42)
+        coords = svd.fit_transform(sub_X)
+
+        x_vals = coords[:, 0]
+        y_vals = coords[:, 1]
+        x_min, x_max = float(np.min(x_vals)), float(np.max(x_vals))
+        y_min, y_max = float(np.min(y_vals)), float(np.max(y_vals))
+        x_span = max(x_max - x_min, 1e-6)
+        y_span = max(y_max - y_min, 1e-6)
         sub_knn = NearestNeighbors(metric="cosine", algorithm="brute")
         sub_knn.fit(sub_X)
 
@@ -265,6 +277,8 @@ class AnimeRecommender:
 
             pop_norm = (self.popularity[global_i] - min_pop) / pop_span
             radius = round(8.0 + pop_norm * 18.0, 2)
+            x = float((x_vals[local_i] - x_min) / x_span)
+            y = float((y_vals[local_i] - y_min) / y_span)
 
             nodes.append({
                 "id": self.ids[global_i],
@@ -275,6 +289,8 @@ class AnimeRecommender:
                 "anilist_url": self.links[global_i],
                 "genres": self.genres[global_i][:4],
                 "radius": radius,
+                "x": round(x, 4),
+                "y": round(y, 4),
                 "similar": local_neighbors,
             })
 
@@ -341,7 +357,7 @@ def recommend(req: RecommendRequest):
 
 @app.get("/map", response_model=MapResponse)
 def map_data(
-    limit: int = Query(180, ge=20, le=350),
+    limit: int = Query(180, ge=20, le=1200),
     neighbors: int = Query(5, ge=2, le=10),
 ):
     return recommender.build_similarity_map(limit=limit, neighbors=neighbors)

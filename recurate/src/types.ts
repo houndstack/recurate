@@ -25,6 +25,8 @@ export interface MapNode {
   anilist_url: string;
   genres: string[];
   radius: number;
+  x: number;
+  y: number;
   similar: SimilarAnime[];
 }
 

@@ -1,15 +1,15 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { fetchAnimeMap } from "../api";
 import type { MapEdge, MapNode } from "../types";
 
-type Particle = {
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-};
+const VIEW_W = 3200;
+const VIEW_H = 2200;
+const PANEL_H = 780;
 
-const MAP_HEIGHT = 620;
+function shortTitle(title: string, max = 18): string {
+  if (title.length <= max) return title;
+  return `${title.slice(0, max - 1)}...`;
+}
 
 export default function AnimeMapTab() {
   const [nodes, setNodes] = useState<MapNode[]>([]);
@@ -17,17 +17,16 @@ export default function AnimeMapTab() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [tick, setTick] = useState(0);
-  const [width, setWidth] = useState(980);
+  const [zoom, setZoom] = useState(0.56);
+  const [offset, setOffset] = useState({ x: 440, y: 230 });
+  const [dragging, setDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
 
-  const wrapRef = useRef<HTMLDivElement | null>(null);
-  const positionsRef = useRef<Record<number, Particle>>({});
-
-  useEffect(() => {
+  React.useEffect(() => {
     const load = async () => {
       try {
         setLoading(true);
-        const map = await fetchAnimeMap(180, 5);
+        const map = await fetchAnimeMap(700, 5);
         setNodes(map.nodes);
         setEdges(map.edges);
         setSelectedId(map.nodes[0]?.id ?? null);
@@ -37,199 +36,151 @@ export default function AnimeMapTab() {
         setLoading(false);
       }
     };
-
     load();
   }, []);
 
-  useEffect(() => {
-    const updateSize = () => {
-      if (!wrapRef.current) return;
-      setWidth(Math.max(340, Math.floor(wrapRef.current.clientWidth)));
-    };
-
-    updateSize();
-    window.addEventListener("resize", updateSize);
-    return () => window.removeEventListener("resize", updateSize);
-  }, []);
-
-  useEffect(() => {
-    if (!nodes.length) return;
-
-    const centerX = width / 2;
-    const centerY = MAP_HEIGHT / 2;
-    const radius = Math.min(width, MAP_HEIGHT) * 0.33;
-
-    const next: Record<number, Particle> = {};
-    nodes.forEach((node, idx) => {
-      const t = (Math.PI * 2 * idx) / Math.max(nodes.length, 1);
-      const jitter = 20 * Math.sin(node.id);
-      next[node.id] = {
-        x: centerX + Math.cos(t) * radius + jitter,
-        y: centerY + Math.sin(t) * radius + jitter,
-        vx: 0,
-        vy: 0,
-      };
-    });
-
-    positionsRef.current = next;
-  }, [nodes, width]);
-
-  useEffect(() => {
-    if (!nodes.length || !edges.length) return;
-
-    const nodeById = new Map(nodes.map((n) => [n.id, n]));
-    let frame = 0;
-
-    const step = () => {
-      const p = positionsRef.current;
-      const ids = nodes.map((n) => n.id);
-      const centerX = width / 2;
-      const centerY = MAP_HEIGHT / 2;
-
-      for (let i = 0; i < ids.length; i += 1) {
-        const a = p[ids[i]];
-        if (!a) continue;
-        a.vx *= 0.92;
-        a.vy *= 0.92;
-        a.vx += (centerX - a.x) * 0.0009;
-        a.vy += (centerY - a.y) * 0.0009;
-      }
-
-      for (let i = 0; i < ids.length; i += 1) {
-        const aId = ids[i];
-        const a = p[aId];
-        const aNode = nodeById.get(aId);
-        if (!a || !aNode) continue;
-        for (let j = i + 1; j < ids.length; j += 1) {
-          const bId = ids[j];
-          const b = p[bId];
-          const bNode = nodeById.get(bId);
-          if (!b || !bNode) continue;
-
-          const dx = a.x - b.x;
-          const dy = a.y - b.y;
-          const distSq = dx * dx + dy * dy + 0.01;
-          const minDist = aNode.radius + bNode.radius + 8;
-          const minDistSq = minDist * minDist;
-
-          if (distSq < minDistSq * 3.2) {
-            const force = 150 / distSq;
-            a.vx += dx * force;
-            a.vy += dy * force;
-            b.vx -= dx * force;
-            b.vy -= dy * force;
-          }
-        }
-      }
-
-      for (const edge of edges) {
-        const a = p[edge.source];
-        const b = p[edge.target];
-        if (!a || !b) continue;
-
-        const dx = b.x - a.x;
-        const dy = b.y - a.y;
-        const dist = Math.sqrt(dx * dx + dy * dy) + 0.001;
-        const targetDist = 90 - edge.weight * 42;
-        const spring = (dist - targetDist) * (0.004 + edge.weight * 0.004);
-        const fx = (dx / dist) * spring;
-        const fy = (dy / dist) * spring;
-
-        a.vx += fx;
-        a.vy += fy;
-        b.vx -= fx;
-        b.vy -= fy;
-      }
-
-      for (const id of ids) {
-        const point = p[id];
-        if (!point) continue;
-
-        point.x += point.vx;
-        point.y += point.vy;
-
-        point.x = Math.max(20, Math.min(width - 20, point.x));
-        point.y = Math.max(20, Math.min(MAP_HEIGHT - 20, point.y));
-      }
-
-      frame = window.requestAnimationFrame(step);
-      setTick((n) => n + 1);
-    };
-
-    frame = window.requestAnimationFrame(step);
-    return () => window.cancelAnimationFrame(frame);
-  }, [edges, nodes, width]);
-
-  const selected = useMemo(
-    () => nodes.find((node) => node.id === selectedId) ?? null,
-    [nodes, selectedId]
+  const positionedNodes = useMemo(
+    () =>
+      nodes.map((node) => ({
+        ...node,
+        px: 120 + node.x * (VIEW_W - 240),
+        py: 120 + node.y * (VIEW_H - 240),
+      })),
+    [nodes]
   );
 
+  const nodeById = useMemo(() => {
+    const map = new Map<number, (MapNode & { px: number; py: number })>();
+    positionedNodes.forEach((node) => map.set(node.id, node));
+    return map;
+  }, [positionedNodes]);
+
+  const selected = useMemo(
+    () => positionedNodes.find((node) => node.id === selectedId) ?? null,
+    [positionedNodes, selectedId]
+  );
+
+  const onWheel: React.WheelEventHandler<SVGSVGElement> = (e) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -0.05 : 0.05;
+    setZoom((z) => Math.max(0.25, Math.min(2.8, z + delta)));
+  };
+
+  const onPointerDown: React.PointerEventHandler<SVGSVGElement> = (e) => {
+    setDragging(true);
+    setDragStart({ x: e.clientX, y: e.clientY });
+  };
+
+  const onPointerMove: React.PointerEventHandler<SVGSVGElement> = (e) => {
+    if (!dragging) return;
+    const dx = e.clientX - dragStart.x;
+    const dy = e.clientY - dragStart.y;
+    setOffset((prev) => ({ x: prev.x + dx, y: prev.y + dy }));
+    setDragStart({ x: e.clientX, y: e.clientY });
+  };
+
+  const onPointerUp: React.PointerEventHandler<SVGSVGElement> = () => {
+    setDragging(false);
+  };
+
   return (
-    <section className="grid gap-4 lg:grid-cols-[1fr_320px]">
-      <div
-        ref={wrapRef}
-        className="relative overflow-hidden rounded-3xl border border-slate-200/70 bg-white/70 p-3 shadow-xl shadow-slate-900/5 backdrop-blur dark:border-slate-800 dark:bg-slate-900/60 dark:shadow-black/20"
-      >
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-cyan-300/20 to-transparent dark:from-cyan-500/10" />
+    <section className="grid gap-4 lg:grid-cols-[1fr_330px]">
+      <div className="relative overflow-hidden rounded-3xl border border-slate-200/70 bg-white/70 p-3 shadow-xl shadow-slate-900/5 backdrop-blur dark:border-slate-800 dark:bg-slate-900/60 dark:shadow-black/20">
+        <div className="mb-2 flex items-center justify-between px-2 text-xs text-slate-600 dark:text-slate-300">
+          <span>
+            {nodes.length.toLocaleString()} anime nodes | scroll to zoom, drag to pan
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setZoom((z) => Math.max(0.25, z - 0.1))}
+              className="rounded-md border border-slate-300 px-2 py-1 dark:border-slate-700"
+            >
+              -
+            </button>
+            <span>{Math.round(zoom * 100)}%</span>
+            <button
+              onClick={() => setZoom((z) => Math.min(2.8, z + 0.1))}
+              className="rounded-md border border-slate-300 px-2 py-1 dark:border-slate-700"
+            >
+              +
+            </button>
+          </div>
+        </div>
+
         {loading && (
-          <div className="grid h-[620px] place-items-center text-sm text-slate-500 dark:text-slate-400">
-            Building anime map...
+          <div className="grid h-[780px] place-items-center text-sm text-slate-500 dark:text-slate-400">
+            Building static similarity map...
           </div>
         )}
         {error && !loading && (
-          <div className="grid h-[620px] place-items-center text-sm text-rose-600 dark:text-rose-300">
+          <div className="grid h-[780px] place-items-center text-sm text-rose-600 dark:text-rose-300">
             {error}
           </div>
         )}
+
         {!loading && !error && (
           <svg
-            key={tick}
-            width={width}
-            height={MAP_HEIGHT}
-            viewBox={`0 0 ${width} ${MAP_HEIGHT}`}
-            className="relative z-10"
+            width="100%"
+            height={PANEL_H}
+            viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
+            className="rounded-2xl bg-slate-50 dark:bg-slate-950/80"
+            onWheel={onWheel}
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={onPointerUp}
+            onPointerLeave={onPointerUp}
           >
-            {edges.map((edge) => {
-              const a = positionsRef.current[edge.source];
-              const b = positionsRef.current[edge.target];
-              if (!a || !b) return null;
-              return (
-                <line
-                  key={`${edge.source}-${edge.target}`}
-                  x1={a.x}
-                  y1={a.y}
-                  x2={b.x}
-                  y2={b.y}
-                  stroke={selectedId === edge.source || selectedId === edge.target ? "#22d3ee" : "#64748b"}
-                  strokeOpacity={0.08 + edge.weight * 0.34}
-                  strokeWidth={0.6 + edge.weight * 2.8}
-                />
-              );
-            })}
-
-            {nodes.map((node) => {
-              const point = positionsRef.current[node.id];
-              if (!point) return null;
-              const isActive = selectedId === node.id;
-              return (
-                <g
-                  key={node.id}
-                  onClick={() => setSelectedId(node.id)}
-                  className="cursor-pointer"
-                >
-                  <circle
-                    cx={point.x}
-                    cy={point.y}
-                    r={node.radius + (isActive ? 3 : 0)}
-                    fill={isActive ? "#06b6d4" : "#0f172a"}
-                    fillOpacity={isActive ? 0.9 : 0.82}
-                    stroke={isActive ? "#e0f2fe" : "#334155"}
-                    strokeWidth={isActive ? 2.2 : 1.1}
+            <g transform={`translate(${offset.x} ${offset.y}) scale(${zoom})`}>
+              {edges.map((edge) => {
+                const a = nodeById.get(edge.source);
+                const b = nodeById.get(edge.target);
+                if (!a || !b) return null;
+                return (
+                  <line
+                    key={`${edge.source}-${edge.target}`}
+                    x1={a.px}
+                    y1={a.py}
+                    x2={b.px}
+                    y2={b.py}
+                    stroke={selectedId === edge.source || selectedId === edge.target ? "#22d3ee" : "#64748b"}
+                    strokeOpacity={0.04 + edge.weight * 0.24}
+                    strokeWidth={0.5 + edge.weight * 2}
                   />
-                </g>
-              );
-            })}
+                );
+              })}
+
+              {positionedNodes.map((node) => {
+                const isActive = node.id === selectedId;
+                return (
+                  <g
+                    key={node.id}
+                    onClick={() => setSelectedId(node.id)}
+                    className="cursor-pointer"
+                  >
+                    <circle
+                      cx={node.px}
+                      cy={node.py}
+                      r={node.radius + (isActive ? 3 : 0)}
+                      fill={isActive ? "#06b6d4" : "#0f172a"}
+                      fillOpacity={isActive ? 0.93 : 0.84}
+                      stroke={isActive ? "#e0f2fe" : "#334155"}
+                      strokeWidth={isActive ? 2 : 1}
+                    />
+                    <text
+                      x={node.px}
+                      y={node.py + 2}
+                      textAnchor="middle"
+                      fontSize={9}
+                      fontWeight={700}
+                      fill="#f8fafc"
+                      pointerEvents="none"
+                    >
+                      {shortTitle(node.title)}
+                    </text>
+                  </g>
+                );
+              })}
+            </g>
           </svg>
         )}
       </div>
