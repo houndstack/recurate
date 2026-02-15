@@ -27,6 +27,7 @@ export interface MapNode {
   radius: number;
   x: number;
   y: number;
+  cluster: number;
   similar: SimilarAnime[];
 }
 

@@ -10,6 +10,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.neighbors import NearestNeighbors
 from sklearn.preprocessing import MultiLabelBinarizer
 from sklearn.decomposition import TruncatedSVD
+from sklearn.cluster import MiniBatchKMeans
 from scipy.sparse import hstack
 
 
@@ -70,6 +71,7 @@ class MapNode(BaseModel):
     radius: float
     x: float
     y: float
+    cluster: int
     similar: List[SimilarAnime]
 
 
@@ -227,11 +229,39 @@ class AnimeRecommender:
         )[:limit]
 
         sub_X = self.X[ranked]
-        svd = TruncatedSVD(n_components=2, random_state=42)
-        coords = svd.fit_transform(sub_X)
 
-        x_vals = coords[:, 0]
-        y_vals = coords[:, 1]
+        layout_svd = TruncatedSVD(n_components=2, random_state=42)
+        coords_2d = layout_svd.fit_transform(sub_X)
+
+        cluster_dims = min(16, max(4, sub_X.shape[1] - 1))
+        cluster_svd = TruncatedSVD(n_components=cluster_dims, random_state=42)
+        cluster_space = cluster_svd.fit_transform(sub_X)
+        cluster_count = int(max(8, min(22, round(np.sqrt(limit) / 1.6))))
+        kmeans = MiniBatchKMeans(
+            n_clusters=cluster_count,
+            random_state=42,
+            n_init="auto",
+            batch_size=256,
+        )
+        cluster_labels = kmeans.fit_predict(cluster_space)
+
+        global_center = np.mean(coords_2d, axis=0)
+        cluster_centers = {}
+        for c in range(cluster_count):
+            cluster_points = coords_2d[cluster_labels == c]
+            if len(cluster_points) == 0:
+                cluster_centers[c] = global_center.copy()
+            else:
+                cluster_centers[c] = np.mean(cluster_points, axis=0)
+
+        separated = np.zeros_like(coords_2d)
+        for i in range(len(coords_2d)):
+            c = int(cluster_labels[i])
+            direction = cluster_centers[c] - global_center
+            separated[i] = coords_2d[i] + direction * 0.55
+
+        x_vals = separated[:, 0]
+        y_vals = separated[:, 1]
         x_min, x_max = float(np.min(x_vals)), float(np.max(x_vals))
         y_min, y_max = float(np.min(y_vals)), float(np.max(y_vals))
         x_span = max(x_max - x_min, 1e-6)
@@ -277,8 +307,8 @@ class AnimeRecommender:
 
             pop_norm = (self.popularity[global_i] - min_pop) / pop_span
             radius = round(8.0 + pop_norm * 18.0, 2)
-            x = float((x_vals[local_i] - x_min) / x_span)
-            y = float((y_vals[local_i] - y_min) / y_span)
+            x = float((separated[local_i][0] - x_min) / x_span)
+            y = float((separated[local_i][1] - y_min) / y_span)
 
             nodes.append({
                 "id": self.ids[global_i],
@@ -291,6 +321,7 @@ class AnimeRecommender:
                 "radius": radius,
                 "x": round(x, 4),
                 "y": round(y, 4),
+                "cluster": int(cluster_labels[local_i]),
                 "similar": local_neighbors,
             })
 
