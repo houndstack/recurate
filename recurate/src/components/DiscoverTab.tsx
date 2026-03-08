@@ -5,6 +5,7 @@ import { fetchRecommendations } from "../api";
 import AnimeSearchInput from "./AnimeSearchInput";
 import type { Recommendation } from "../types";
 import type { AniListResult } from "../api/anilist";
+import AskRecuratePanel from "./AskRecuratePanel";
 
 type SortMode = "match" | "score";
 
@@ -172,6 +173,12 @@ export default function DiscoverTab() {
             Backend may be waking up on Render free tier. This can take ~30-60 seconds.
           </p>
         )}
+        <AskRecuratePanel
+          likedAnimeIds={selected.map((a) => a.id)}
+          k={k}
+          minScore={minScore}
+          onApplyRecommendations={setResults}
+        />
 
         {loading ? (
           <section className="grid grid-cols-2 gap-4 pb-8 sm:grid-cols-3 md:grid-cols-4">

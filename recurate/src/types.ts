@@ -42,3 +42,29 @@ export interface MapResponse {
   edges: MapEdge[];
 }
 
+export interface AgentPreferences {
+  moods: string[];
+  genres_include: string[];
+  genres_exclude: string[];
+  max_episodes: number | null;
+  extra_constraints: string[];
+}
+
+export interface AgentRecommendation {
+  id: number;
+  title: string;
+  score: number;
+  similarity: number;
+  cover_image: string;
+  anilist_url: string;
+  rationale: string;
+}
+
+export interface AgentRecommendResponse {
+  mode: string;
+  parsed_preferences: AgentPreferences;
+  candidate_ids: number[];
+  recommendations: AgentRecommendation[];
+  reasoning_summary: string;
+}
+

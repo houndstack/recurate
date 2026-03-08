@@ -1,4 +1,8 @@
-import { type MapResponse, type Recommendation } from "./types";
+import {
+  type AgentRecommendResponse,
+  type MapResponse,
+  type Recommendation,
+} from "./types";
 
 const API_BASE = import.meta.env.VITE_API_URL
 
@@ -31,6 +35,27 @@ export async function fetchAnimeMap(
 
   if (!res.ok) {
     throw new Error("Failed to fetch map data");
+  }
+
+  return res.json();
+}
+
+export async function fetchAgentRecommendations(payload: {
+  user_prompt: string;
+  liked_anime_ids: number[];
+  disliked_anime_ids?: number[];
+  k?: number;
+  min_score?: number;
+  use_llm?: boolean;
+}): Promise<AgentRecommendResponse> {
+  const res = await fetch(`${API_BASE}/agent/recommend`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    throw new Error("Failed to fetch agent recommendations");
   }
 
   return res.json();
