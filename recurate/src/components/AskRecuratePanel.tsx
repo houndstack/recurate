@@ -39,7 +39,6 @@ export default function AskRecuratePanel({
         disliked_anime_ids: [],
         k,
         min_score: minScore,
-        use_llm: true,
       });
       setResponse(res);
 
@@ -68,13 +67,10 @@ export default function AskRecuratePanel({
         <h2 className="text-sm font-bold tracking-wide text-slate-900 dark:text-slate-100">
           Ask Recurate
         </h2>
-        <span className="rounded-full bg-cyan-500/15 px-2 py-1 text-[11px] font-semibold text-cyan-700 dark:text-cyan-300">
-          Agentic
-        </span>
       </div>
 
       <p className="mb-3 text-xs text-slate-600 dark:text-slate-300">
-        Describe what you want in plain English. The agent will parse preferences and run recommendations.
+        Describe what you want in plain English. Recurate will parse your preferences and run recommendations.
       </p>
 
       <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
@@ -117,7 +113,7 @@ export default function AskRecuratePanel({
             {response.reasoning_summary}
           </p>
           <p className="mt-1 text-slate-600 dark:text-slate-300">
-            Mode: {response.mode} | Candidates: {response.candidate_ids.length}
+            Candidates: {response.candidate_ids.length}
           </p>
         </div>
       )}

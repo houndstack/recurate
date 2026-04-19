@@ -1,5 +1,4 @@
 import json
-import os
 import numpy as np
 from typing import List, Dict, Optional
 from fastapi import FastAPI, HTTPException
@@ -93,7 +92,6 @@ class AgentRecommendRequest(BaseModel):
     disliked_anime_ids: List[int] = Field(default_factory=list)
     k: int = Field(default=8, ge=1, le=30)
     min_score: int = Field(default=0, ge=0, le=100)
-    use_llm: bool = True
 
 
 class AgentPreferences(BaseModel):
@@ -115,7 +113,6 @@ class AgentRecommendation(BaseModel):
 
 
 class AgentRecommendResponse(BaseModel):
-    mode: str
     parsed_preferences: AgentPreferences
     candidate_ids: List[int]
     recommendations: List[AgentRecommendation]
@@ -529,53 +526,6 @@ def _build_agent_recs(
     return out
 
 
-def _maybe_llm_summary(
-    req: AgentRecommendRequest,
-    prefs: AgentPreferences,
-    anime: List[AgentRecommendation],
-) -> Optional[str]:
-    if not req.use_llm:
-        return None
-
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        return None
-
-    try:
-        from openai import OpenAI  # type: ignore
-    except Exception:
-        return None
-
-    try:
-        client = OpenAI(api_key=api_key)
-        model = os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
-
-        shortlist = [
-            {"title": a.title, "score": a.score, "similarity": a.similarity}
-            for a in anime[:6]
-        ]
-
-        prompt = (
-            "User request:\n"
-            f"{req.user_prompt}\n\n"
-            "Parsed preferences:\n"
-            f"{prefs.model_dump_json()}\n\n"
-            "Candidate shortlist:\n"
-            f"{json.dumps(shortlist)}\n\n"
-            "Write 2 concise sentences explaining why these picks fit. "
-            "Do not invent titles."
-        )
-
-        r = client.responses.create(
-            model=model,
-            input=prompt,
-            max_output_tokens=140,
-        )
-        return (r.output_text or "").strip() or None
-    except Exception:
-        return None
-
-
 @app.post("/recommend", response_model=List[Recommendation])
 def recommend(req: RecommendRequest):
     try:
@@ -621,14 +571,11 @@ def agent_recommend(req: AgentRecommendRequest):
         )
 
     agent_recs = _build_agent_recs(filtered, prefs=prefs, top_k=req.k)
-    llm_summary = _maybe_llm_summary(req, prefs, agent_recs)
-
-    summary = llm_summary or (
-        "Recommendations are grounded in your selected anime, then filtered by parsed constraints."
+    summary = (
+        "Recommendations are grounded in your selected anime and filtered by the parsed constraints from your prompt."
     )
 
     return AgentRecommendResponse(
-        mode="llm+tools" if llm_summary else "deterministic-fallback",
         parsed_preferences=prefs,
         candidate_ids=[r.id for r in agent_recs],
         recommendations=agent_recs,

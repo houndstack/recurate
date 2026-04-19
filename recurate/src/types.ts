@@ -61,7 +61,6 @@ export interface AgentRecommendation {
 }
 
 export interface AgentRecommendResponse {
-  mode: string;
   parsed_preferences: AgentPreferences;
   candidate_ids: number[];
   recommendations: AgentRecommendation[];

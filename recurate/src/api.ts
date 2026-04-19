@@ -46,7 +46,6 @@ export async function fetchAgentRecommendations(payload: {
   disliked_anime_ids?: number[];
   k?: number;
   min_score?: number;
-  use_llm?: boolean;
 }): Promise<AgentRecommendResponse> {
   const res = await fetch(`${API_BASE}/agent/recommend`, {
     method: "POST",
