@@ -1,10 +1,10 @@
 import json
 import numpy as np
-from typing import List, Dict, Optional
+from typing import List
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.neighbors import NearestNeighbors
@@ -84,39 +84,6 @@ class MapEdge(BaseModel):
 class MapResponse(BaseModel):
     nodes: List[MapNode]
     edges: List[MapEdge]
-
-
-class AgentRecommendRequest(BaseModel):
-    user_prompt: str = Field(..., min_length=2, max_length=1200)
-    liked_anime_ids: List[int] = Field(default_factory=list)
-    disliked_anime_ids: List[int] = Field(default_factory=list)
-    k: int = Field(default=8, ge=1, le=30)
-    min_score: int = Field(default=0, ge=0, le=100)
-
-
-class AgentPreferences(BaseModel):
-    moods: List[str] = Field(default_factory=list)
-    genres_include: List[str] = Field(default_factory=list)
-    genres_exclude: List[str] = Field(default_factory=list)
-    max_episodes: Optional[int] = None
-    extra_constraints: List[str] = Field(default_factory=list)
-
-
-class AgentRecommendation(BaseModel):
-    id: int
-    title: str
-    score: int
-    similarity: float
-    cover_image: str
-    anilist_url: str
-    rationale: str
-
-
-class AgentRecommendResponse(BaseModel):
-    parsed_preferences: AgentPreferences
-    candidate_ids: List[int]
-    recommendations: List[AgentRecommendation]
-    reasoning_summary: str
 
 
 # =============================
@@ -425,107 +392,6 @@ def generate_explanation(shared_genres, shared_tags):
 recommender = AnimeRecommender("anime_data.json")
 
 
-def parse_preferences_local(prompt: str) -> AgentPreferences:
-    p = prompt.lower()
-
-    mood_keywords = {
-        "dark": "dark",
-        "cozy": "cozy",
-        "wholesome": "wholesome",
-        "sad": "emotional",
-        "emotional": "emotional",
-        "funny": "funny",
-        "comedy": "funny",
-        "action": "high-energy",
-        "chill": "calm",
-        "relaxing": "calm",
-    }
-
-    include_genres = [
-        "action", "adventure", "comedy", "drama", "fantasy", "horror",
-        "mystery", "romance", "sci-fi", "slice of life", "sports",
-        "thriller", "psychological",
-    ]
-
-    exclude_markers = ["no ", "without ", "exclude ", "not "]
-    prefs = AgentPreferences()
-
-    for key, mood in mood_keywords.items():
-        if key in p and mood not in prefs.moods:
-            prefs.moods.append(mood)
-
-    for genre in include_genres:
-        if genre in p:
-            excluded = any(f"{marker}{genre}" in p for marker in exclude_markers)
-            if excluded:
-                if genre not in prefs.genres_exclude:
-                    prefs.genres_exclude.append(genre)
-            else:
-                if genre not in prefs.genres_include:
-                    prefs.genres_include.append(genre)
-
-    for token in p.replace("-", " ").split():
-        if token.isdigit():
-            n = int(token)
-            if 2 <= n <= 500 and ("episode" in p or "eps" in p):
-                prefs.max_episodes = n
-                break
-
-    return prefs
-
-
-def _filter_recommendations(
-    recs: List[Dict],
-    prefs: AgentPreferences,
-    disliked_ids: set,
-    min_score: int,
-) -> List[Dict]:
-    filtered = []
-    for rec in recs:
-        if rec["id"] in disliked_ids:
-            continue
-        if rec["score"] < min_score:
-            continue
-
-        g = [genre.lower() for genre in rec.get("shared_genres", [])]
-        if prefs.genres_include and not any(x in g for x in prefs.genres_include):
-            continue
-        if prefs.genres_exclude and any(x in g for x in prefs.genres_exclude):
-            continue
-
-        filtered.append(rec)
-    return filtered
-
-
-def _build_agent_recs(
-    recs: List[Dict],
-    prefs: AgentPreferences,
-    top_k: int,
-) -> List[AgentRecommendation]:
-    out = []
-    for rec in recs[:top_k]:
-        reason_bits = []
-        if rec.get("shared_genres"):
-            reason_bits.append(f"Shared genres: {', '.join(rec['shared_genres'][:2])}")
-        if rec.get("shared_tags"):
-            reason_bits.append(f"Themes: {', '.join(rec['shared_tags'][:2])}")
-        if prefs.moods:
-            reason_bits.append(f"Requested vibe: {', '.join(prefs.moods[:2])}")
-
-        out.append(
-            AgentRecommendation(
-                id=rec["id"],
-                title=rec["title"],
-                score=rec["score"],
-                similarity=rec["similarity"],
-                cover_image=rec["cover_image"],
-                anilist_url=rec["anilist_url"],
-                rationale=" | ".join(reason_bits) if reason_bits else "Closest match to your profile.",
-            )
-        )
-    return out
-
-
 @app.post("/recommend", response_model=List[Recommendation])
 def recommend(req: RecommendRequest):
     try:
@@ -540,47 +406,6 @@ def map_data(
     neighbors: int = Query(5, ge=2, le=10),
 ):
     return recommender.build_similarity_map(limit=limit, neighbors=neighbors)
-
-
-@app.post("/agent/recommend", response_model=AgentRecommendResponse)
-def agent_recommend(req: AgentRecommendRequest):
-    liked_ids = [x for x in req.liked_anime_ids if x in recommender.ids]
-    if not liked_ids:
-        raise HTTPException(
-            status_code=400,
-            detail="liked_anime_ids must include at least one valid anime id.",
-        )
-
-    prefs = parse_preferences_local(req.user_prompt)
-
-    base_k = max(req.k * 4, 20)
-    raw = recommender.recommend(liked_ids, base_k)
-    filtered = _filter_recommendations(
-        raw,
-        prefs=prefs,
-        disliked_ids=set(req.disliked_anime_ids),
-        min_score=req.min_score,
-    )
-
-    if not filtered:
-        filtered = _filter_recommendations(
-            raw,
-            prefs=AgentPreferences(),
-            disliked_ids=set(req.disliked_anime_ids),
-            min_score=req.min_score,
-        )
-
-    agent_recs = _build_agent_recs(filtered, prefs=prefs, top_k=req.k)
-    summary = (
-        "Recommendations are grounded in your selected anime and filtered by the parsed constraints from your prompt."
-    )
-
-    return AgentRecommendResponse(
-        parsed_preferences=prefs,
-        candidate_ids=[r.id for r in agent_recs],
-        recommendations=agent_recs,
-        reasoning_summary=summary,
-    )
 
 
 @app.get("/")
